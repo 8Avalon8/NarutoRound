@@ -342,6 +342,9 @@ class BattleScene(Scene):
         
         # 记录战斗日志
         self.battle_log.add_message(result)
+
+        # Log skill and target
+        print(f"Log message: Skill used: {self.selected_skill.name} on target: {self.selected_target.name} by {self.battle_state.current_character.name}")
         
         # 清除选择
         self.selected_skill = None
@@ -356,9 +359,9 @@ class BattleScene(Scene):
         if self.battle_state.is_battle_over:
             return
         
-        # 手动切换到下一个角色行动    
-        self.battle_state.next_character()
-            
+        # Log current character before preparing next turn
+        print(f"Log message: Current character in _on_use_skill_click before prepare_next_turn: {self.battle_state.current_character.name}")
+
         # 准备下一个角色的回合
         self.prepare_next_turn()
     
@@ -368,6 +371,8 @@ class BattleScene(Scene):
         next_character = self.battle_system.get_next_acting_character(self.battle_state)
         
         if next_character:
+            # Log next character
+            print(f"Log message: Next character in prepare_next_turn: {next_character.name}")
             # 更新当前角色
             self.battle_state.current_character = next_character
             
@@ -375,6 +380,8 @@ class BattleScene(Scene):
             if next_character in self.player_team.characters:
                 self.battle_state.current_team = self.player_team
                 self.is_player_turn = True
+                # Log turn status
+                print(f"Log message: It is Player's turn.")
                 self.is_waiting_for_action = True
                 self.battle_log.add_message(f"{next_character.name}的回合，请选择行动")
                 # 更新技能按钮
@@ -382,12 +389,15 @@ class BattleScene(Scene):
             else:
                 self.battle_state.current_team = self.enemy_team
                 self.is_player_turn = False
+                # Log turn status
+                print(f"Log message: It is AI's turn.")
                 self.is_waiting_for_action = False
                 self.battle_log.add_message(f"{next_character.name}的回合")
                 # 执行AI行动
                 self._execute_ai_action()
         else:
             # 如果没有下一个行动角色，可能战斗结束了
+            print("Log message: No next character found in prepare_next_turn.")
             self._check_battle_end()
     
     def _execute_ai_action(self):
