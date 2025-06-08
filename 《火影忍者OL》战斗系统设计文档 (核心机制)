@@ -1,0 +1,208 @@
+1. 战斗系统概述本战斗系统设计旨在为《火影忍者OL》游戏原型Demo提供清晰、可实现的战斗逻辑框架。系统核心围绕回合制策略、独特的“追打”连招机制、丰富的Buff/Debuff状态效果以及查克ラ资源管理。玩家通过策略性地配置忍者小队、安排“手位”（行动顺序）、选择技能释放时机，以达成华丽的连招并击败对手。核心特点：
+回合制策略：战斗按回合进行，敌我双方根据“手位”和“先攻”值决定行动顺序 1。
+追打系统：核心战斗玩法。特定攻击造成“起始状态”（如小浮空、倒地），触发拥有对应追打技能的队友进行连锁攻击，形成高连击 1。
+Buff/Debuff与状态效果：多样化的增益、减益和控制效果（如点燃、中毒、封穴、定身、结界）深刻影响战场局势 5。
+查克拉管理：奥义技能的释放消耗查克拉，合理分配和获取查克拉是战斗策略的重要组成部分 1。
+角色站位与手位：不仅影响行动顺序，也关系到伤害承受和部分技能的目标选择 1。
+2. 核心战斗流程图以下流程图描述了战斗的基本回合循环。代码段graph TD
+    A[战斗开始] --> B{初始化战场};
+    B --> C[回合开始];
+    C --> D{判定先攻方};
+    D -- 己方先攻 --> E[己方回合];
+    D -- 敌方先攻 --> F[敌方回合];
+
+    E --> G{按手位顺序行动 (1号位 -> 4号位)};
+    G -- 当前角色行动 --> H{角色行动阶段};
+    H --> I{选择技能类型 (普攻/奥义)};
+    I -- 奥义 --> J{检查查克拉是否足够};
+    J -- 足够 --> K[选择奥义技能];
+    J -- 不足 --> L[返回选择技能/执行普攻];
+    I -- 普攻 --> M[选择普攻技能];
+    K --> N[选择技能目标];
+    M --> N;
+    L --> M;
+    N --> O{技能结算};
+    O -- 造成伤害/治疗 --> P[更新目标状态];
+    O -- 施加Buff/Debuff --> P;
+    O -- 造成追打起始状态 --> Q{触发追打?};
+    Q -- 是 --> R[执行追打序列];
+    Q -- 否 --> S{当前角色行动结束};
+    R --> S;
+    P --> S;
+
+    S --> T{所有己方角色行动完毕?};
+    T -- 否 --> G;
+    T -- 是 --> U{己方回合结束};
+    U --> F;
+
+    F --> V{按AI逻辑/手位行动};
+    V --> W{敌方技能结算};
+    W -- 造成伤害/治疗 --> X[更新目标状态];
+    W -- 施加Buff/Debuff --> X;
+    W -- 造成追打起始状态 --> Y{触发追打? (敌方)};
+    Y -- 是 --> Z[执行追打序列 (敌方)];
+    Y -- 否 --> AA{敌方当前单位行动结束};
+    Z --> AA;
+    X --> AA;
+    AA --> AB{所有敌方单位行动完毕?};
+    AB -- 否 --> V;
+    AB -- 是 --> AC{敌方回合结束};
+
+    AC --> AD{战斗结束条件判断 (一方全灭?)};
+    AD -- 是 --> AE[战斗结束];
+    AD -- 否 --> C;
+流程说明:
+初始化战场：加载角色、Buff、Debuff、查克拉等初始状态。
+回合开始：触发回合开始的Buff/Debuff结算，查克拉回复等。
+判定先攻方：根据队伍总先攻值或其他规则决定哪一方先行动。
+角色行动阶段：
+
+根据手位（1号位最先，4号位最后）顺序，轮到当前角色行动 1。
+玩家/AI选择释放普攻或奥义。奥义需检查查克拉 1。
+技能结算：计算伤害，施加Buff/Debuff，并判定是否造成了可被追打的“起始状态”（如小浮空、倒地、击退） 3。
+
+
+追打序列：
+
+若技能造成了“起始状态”，则检查队伍中是否有其他角色的追打技能可以响应此状态，并按手位优先触发 1。
+追打技能本身也可能造成新的“起始状态”，形成连锁追打。
+详见下方“追打系统流程图”。
+
+
+回合结束：一方所有角色行动完毕后，轮到另一方行动。双方都行动完毕，则进入下一回合，直至满足战斗结束条件。
+3. 追打系统流程图代码段graph TD
+    A[技能命中造成追打起始状态 (如: 小浮空)] --> B{系统检测: 队伍中是否存在可响应'小浮空'的追打技能};
+    B -- 否 --> C[追打链结束];
+    B -- 是 --> D{按手位顺序查找第一个可追打角色};
+    D --> E{角色执行追打技能};
+    E --> F[追打技能结算 (伤害, 效果)];
+    F --> G{该追打是否造成新的追打起始状态 (如: 倒地)};
+    G -- 是 --> H{系统检测: 队伍中是否存在可响应'倒地'的追打技能};
+    H -- 否 --> C;
+    H -- 是 --> I{按手位顺序查找下一个可追打角色 (不能是刚行动过的角色, 除非特殊设计)};
+    I --> E;
+    C --> J[返回主战斗流程];
+流程说明:
+当一个技能（普攻或奥义）成功对目标施加了一个“追打起始状态”（如小浮空、大浮空、倒地、击退）时，追打系统被激活 3。
+系统会按照当前队伍中忍者的“手位”顺序（1号位优先）检查是否有忍者的追打技能能够响应当前敌人身上的状态 1。
+如果找到匹配的追打技能，该忍者立即执行追打。
+该追打技能结算后，如果它本身又对敌人造成了新的“追打起始状态”，则系统会继续按手位顺序（通常会排除刚刚行动过的追打忍者，除非有特殊机制允许同一忍者连续追打不同状态）寻找下一个可以响应新状态的追打技能。
+此过程循环，直至没有忍者可以响应当前状态，或达到预设的追打上限（如有）。
+高连击数可能会触发某些忍者的被动技能或特殊效果 3。
+4. 核心数据结构以下为战斗系统所需的核心数据结构（伪代码形式）。4.1 角色 (Character)Character {
+  ID: string;                      // 角色唯一ID
+  Name: string;                    // 角色名称
+  MaxHP: int;                      // 最大生命值
+  CurrentHP: int;                  // 当前生命值
+  Attack: int;                     // 攻击力 (影响物理/体术伤害)
+  Defense: int;                    // 防御力 (减免物理/体术伤害)
+  NinjaTech: int;                  // 忍术攻击 (影响忍术伤害)
+  Resistance: int;                 // 忍术防御 (减免忍术伤害)
+  Speed: int;                      // 先攻值 (影响队伍整体先攻)
+  CritRate: float;                 // 暴击率
+  CritDamageBonus: float;          // 暴击伤害加成
+  Position: int;                   // 战场位置/手位 (1-4) [1, 2]
+  Chakra: int;                     // 当前查克拉 (通常为小队共享，此处可作为个体贡献或特殊技能消耗)
+  Skills: {                        // 技能列表
+    NormalAttack: Skill_ID;        // 普攻技能ID
+    MysteryArt: Skill_ID;          // 奥义技能ID
+    ChaseSkills: list<Skill_ID>;   // 追打技能ID列表
+    PassiveSkills: list<Skill_ID>; // 被动技能ID列表
+  }
+  CurrentBuffs: list<ActiveStatusEffect>;    // 当前生效的Buff
+  CurrentDebuffs: list<ActiveStatusEffect>;  // 当前生效的Debuff
+  Tags: list<string>;              // 角色标签 (如: 带刀, 雷属性, 晓组织) [4, 15, 8]
+  IsAlive: boolean;                // 是否存活
+  CanAct: boolean;                 // 是否能行动 (受定身等状态影响)
+  SummonerID: string;              // (可选) 如果是召唤物，其召唤者的ID
+  IsSummon: boolean;               // 是否为召唤物
+}
+4.2 技能 (Skill)Skill {
+  ID: string;                      // 技能唯一ID
+  Name: string;                    // 技能名称
+  Type: Enum(Normal, Mystery, Chase, Passive); // 技能类型 [3]
+  Description: string;             // 技能描述
+  ChakraCost: int;                 // 查克拉消耗 (奥义通常消耗，普攻通常为0) [2, 3]
+  CooldownTurns: int;              // 冷却回合数 (奥义可能有)
+  CurrentCooldown: int;            // 当前剩余冷却回合
+  TargetType: Enum(               // 目标选取类型 [1, 6]
+    Single_Enemy_Front,            // 正面敌人
+    Single_Enemy_LowestHP,         // 生命最低敌人
+    Single_Enemy_Manual,           // 手动选择敌人
+    All_Enemies,                   // 敌方全体
+    Random_N_Enemies,              // 随机N个敌人
+    Enemy_Row_Most,                // 敌人最多的一横行
+    Self,                          // 自身
+    Single_Ally,                   // 单个友方
+    All_Allies,                    // 友方全体
+    //... 其他类型
+  );
+  TargetCount: int;                // 目标数量 (配合TargetType使用, 如Random_N_Enemies)
+  Effects: list<SkillEffect>;      // 技能效果列表 (伤害、治疗、施加状态等)
+  
+  // 追打相关参数 (仅Type为Chase或能触发Chase的技能需要)
+  CausesChaseState: Enum(None, SmallFloat, BigFloat, Knockdown, Repel); // 此技能命中止标后造成的追打状态 [3, 7, 4]
+  RequiresChaseState: Enum(None, SmallFloat, BigFloat, Knockdown, Repel); // (仅追打技) 此追打技响应的敌方状态
+  ChasePriority: int;              // (可选) 追打优先级 (若手位相同)
+  IsInterruptible: boolean;        // (仅奥义) 是否可被打断 [1]
+  IsInstant: boolean;              // (仅奥义) 是否瞬发 [2]
+}
+4.3 技能效果 (SkillEffect)SkillEffect {
+  EffectType: Enum(
+    Damage,                        // 造成伤害
+    Heal,                          // 治疗
+    ApplyStatus,                   // 施加状态 (Buff/Debuff)
+    RemoveStatus,                  // 移除状态 (驱散)
+    ModifyChakra,                  // 修改查克拉 (敌方/我方) [10, 6]
+    Summon,                        // 召唤单位 [1, 12]
+    //... 其他效果
+  );
+  ValueFormula: string;            // 效果值计算公式 (如: "Attack * 1.5 + NinjaTech * 0.8")
+  StatusID_ToApply: string;        // (若EffectType为ApplyStatus) 状态ID
+  ApplyChance: float;              // (若EffectType为ApplyStatus) 施加概率 (0.0 - 1.0)
+  RemoveStatusType: Enum(Buff, Debuff, SpecificStatusID); // (若EffectType为RemoveStatus)
+  ChakraChangeAmount: int;         // (若EffectType为ModifyChakra)
+  SummonCharacterID: string;       // (若EffectType为Summon) 召唤的角色ID
+  //... 其他效果参数
+}
+4.4 状态效果 (StatusEffectDefinition - Buff/Debuff定义)StatusEffectDefinition {
+  ID: string;                      // 状态唯一ID (如: "Poison", "AttackUp", "Immobilize")
+  Name: string;                    // 状态名称
+  Type: Enum(Buff, Debuff);        // 增益或减益
+  Icon: string;                    // 显示图标
+  MaxStacks: int;                  // 最大叠加层数 (1表示不叠加，仅刷新)
+  DurationTurns: int;              // 基础持续回合数
+  IsPermanent: boolean;            // 是否永久 (如某些被动赋予的光环)
+  OnApplyEffects: list<InstantEffect>; // 施加时立即触发的效果 (如直接伤害/治疗)
+  OnTurnStartEffects: list<PeriodicEffect>; // 每回合开始时触发的效果 (如DOT伤害，属性修改)
+  OnTurnEndEffects: list<PeriodicEffect>;   // 每回合结束时触发的效果
+  OnRemoveEffects: list<InstantEffect>;  // 移除时触发的效果
+  Modifiers: list<StatModifier>;   // 属性修改器 (如: Attack +20%, Speed -10)
+  PreventsAction: boolean;         // 是否阻止行动 (如: 定身, 混乱, 睡眠) [1, 9]
+  IsDispelledBy: list<string>;     // 可被哪些类型的驱散移除
+  IsImmunityBypassedBy: list<string>; // 可绕过哪些免疫效果
+  //... 其他特殊逻辑标记 (如: "IsChaseTriggerState", "IsControlDebuff")
+}
+4.5 战场激活的状态效果 (ActiveStatusEffect)ActiveStatusEffect {
+  DefinitionID: string;            // 对应StatusEffectDefinition的ID
+  SourceCharacterID: string;       // 施加者ID
+  TargetCharacterID: string;       //承受者ID
+  RemainingTurns: int;             // 剩余回合数
+  CurrentStacks: int;              // 当前叠加层数
+  AppliedTurn: int;                // 被施加的回合数
+}
+4.6 战斗小队 (BattleTeam)BattleTeam {
+  PlayerID: string;                // 玩家/AI的ID
+  Characters: list<Character_ID>;  // 队伍中的角色ID列表 (按手位1-4排序)
+  SharedChakra: int;               // 小队当前共享查克拉总量
+  MaxChakra: int;                  // 小队查克拉上限 (通常为100)
+  ChakraPerTurn: int;              // 每回合自动回复的查克拉 (通常为20)
+  TeamBuffs: list<ActiveStatusEffect>; // 作用于整个队伍的Buff (如结界) [2, 8]
+}
+5. 总结与后续本文档初步定义了《火影忍者OL》原型Demo的核心战斗流程、追打机制以及关键数据结构。后续开发应基于此框架进行细化，包括：
+具体技能数值与效果设计。
+AI行为逻辑。
+UI/UX交互设计。
+更完善的Buff/Debuff叠加与互斥规则。
+结界、召唤物等特殊机制的详细实现。
+通过迭代开发和测试，逐步完善战斗系统的各个方面，以期再现《火影忍者OL》富有策略性和观赏性的战斗体验。
