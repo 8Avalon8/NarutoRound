@@ -158,7 +158,7 @@ class BattleState:
         
         # 使用技能
         success, result = self.selected_skill.use(self.current_character, self.selected_targets, self)
-        
+
         if success:
             if isinstance(result, list):
                 for msg in result:
@@ -170,6 +170,9 @@ class BattleState:
             if self.check_battle_end():
                 return True
                 
+            # 标记角色已行动
+            self.current_character.can_act = False
+
             # 重置选择
             self.selected_skill = None
             self.selected_targets = []
@@ -393,7 +396,10 @@ class BattleSystem:
         if not target.is_alive:
             result += f"，{target.name}倒下了！"
             self._check_battle_end(battle_state)
-        
+
+        # 标记角色已行动，防止本回合再次行动
+        user.can_act = False
+
         return result
     
     def get_valid_targets(self, battle_state, user, skill):

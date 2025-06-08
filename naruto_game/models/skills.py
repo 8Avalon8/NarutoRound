@@ -84,7 +84,7 @@ class Skill:
                     for skill in character.skills:
                         if skill.type == 'CHASE' and skill.can_chase(target, chase_states):
                             # 执行追打
-                            chase_success, chase_result = skill.use([character], [target], battle_state)
+                            chase_success, chase_result = skill.use(character, [target], battle_state)
                             if chase_success:
                                 results.append(chase_result)
                                 # 更新目标状态，如果目标已经死亡则停止追打链
